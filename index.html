@@ -121,7 +121,7 @@
             <span class="text-2xl p-2 bg-yellow-500/10 rounded-xl">✨</span>
             <div>
               <p class="font-bold text-amber-300">閃亮水果 (+3分)</p>
-              <p class="text-xs text-slate-400">隨機出現帶金屬光暈水果，接中獲得高分！</p>
+              <p class="text-xs text-slate-400">隨機出現背後發光的水果，接中獲得高分！</p>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -344,7 +344,7 @@
     let score = 0;
     let lives = 3;
     let lastSpawnTime = 0;
-    let spawnInterval = 1200; // 初始發送間隔
+    let spawnInterval = 1200;
     let headX = null;
     let headY = null;
     let headWidth = 100;
@@ -473,6 +473,8 @@
           setTimeout(() => {
             countdownOverlay.classList.add('hidden');
             gameState = 'PLAYING';
+            // 精確同步遊戲時間起點，防止速度異常
+            lastSpawnTime = Date.now();
             sounds.startBGM();
             if (onComplete) onComplete();
           }, 400);
@@ -492,13 +494,13 @@
     }
 
     async function startGame() {
-      // 徹底重置分數、生命與掉落速度
+      // 徹底初始化並清空變數
       score = 0;
       lives = 3;
       items = [];
       particles = [];
       floatTexts = [];
-      spawnInterval = 1200; // 重置掉落頻率為初始狀態
+      spawnInterval = 1200;
       lastSpawnTime = Date.now();
 
       scoreDisplay.textContent = '0';
@@ -589,8 +591,6 @@
 
         const currentHeadX = (1 - topHead.x) * width;
         const currentHeadY = topHead.y * height;
-        
-        // 精確匹配頭部寬度
         const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.0;
 
         headX = headX === null ? currentHeadX : headX + (currentHeadX - headX) * 0.4;
@@ -603,7 +603,6 @@
           sounds.startBGM();
         }
 
-        // 繪製微型等寬 Emoji 竹籃 🧺
         drawBasketEmoji(headX, headY, headWidth);
 
       } else {
@@ -622,9 +621,7 @@
       drawFloatTexts();
     }
 
-    // --- 繪製縮小版頭部等寬 Emoji 竹籃 🧺 ---
     function drawBasketEmoji(x, y, width) {
-      // 籃子大小精確等於頭部寬度
       const size = Math.max(60, width);
       const basketY = y - size * 0.35;
 
@@ -644,27 +641,26 @@
     function updateGameObjects(width, height) {
       const now = Date.now();
 
-      // 隨著分數合理加快頻率，最低不小於 450ms
-      spawnInterval = Math.max(450, 1200 - score * 12);
+      // 嚴格控制發送間隔（最低不低於 500ms）
+      spawnInterval = Math.max(500, 1200 - score * 12);
 
       if (now - lastSpawnTime > spawnInterval) {
         const itemType = getRandomItemType();
         items.push({
           x: Math.random() * (width - 60) + 30,
           y: -40,
-          // 下落基礎速度固定 3.5 ~ 5.5，隨分數輕微提升
-          speed: Math.random() * 2 + 3.5 + Math.min(score * 0.04, 3.5),
+          // 下落基礎速度固定 3.2 ~ 4.8，上限最多 +3.0
+          speed: (Math.random() * 1.6 + 3.2) + Math.min(score * 0.03, 3.0),
           type: itemType.type,
           emoji: itemType.emoji,
           pts: itemType.pts,
-          size: itemType.type === 'shiny' ? 44 : 38,
+          size: itemType.type === 'shiny' ? 42 : 38,
           rotation: Math.random() * Math.PI,
           rotSpeed: (Math.random() - 0.5) * 0.08
         });
         lastSpawnTime = now;
       }
 
-      // 接水果判定區域以縮小後的籃子尺寸為準
       const basketSize = Math.max(60, headWidth);
       const basketY = headY - basketSize * 0.35;
 
@@ -676,33 +672,38 @@
         canvasCtx.save();
         canvasCtx.translate(item.x, item.y);
 
-        // 如果是發光水果，繪製金色圓形光暈背景
+        // --- 1. 先繪製背景圓形金色光暈與星光 (最底層) ---
         if (item.type === 'shiny') {
           // 圓形光暈背景
-          const haloGrad = canvasCtx.createRadialGradient(0, 0, 5, 0, 0, 32);
-          haloGrad.addColorStop(0, 'rgba(255, 223, 0, 0.95)');
-          haloGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.6)');
+          const haloGrad = canvasCtx.createRadialGradient(0, 0, 4, 0, 0, 36);
+          haloGrad.addColorStop(0, 'rgba(255, 235, 59, 0.9)');
+          haloGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.5)');
           haloGrad.addColorStop(1, 'rgba(245, 158, 11, 0)');
 
           canvasCtx.beginPath();
-          canvasCtx.arc(0, 0, 32, 0, Math.PI * 2);
+          canvasCtx.arc(0, 0, 36, 0, Math.PI * 2);
           canvasCtx.fillStyle = haloGrad;
           canvasCtx.fill();
 
-          // 陰影強發光
-          canvasCtx.shadowColor = '#fbbf24';
-          canvasCtx.shadowBlur = 15;
-
-          // 周圍小星光
+          // 小星光背景裝飾
           canvasCtx.font = '16px serif';
-          canvasCtx.fillText('✨', -22, -16);
-          canvasCtx.fillText('✨', 22, 16);
+          canvasCtx.textAlign = 'center';
+          canvasCtx.textBaseline = 'middle';
+          canvasCtx.fillText('✨', -24, -20);
+          canvasCtx.fillText('✨', 24, 20);
         }
 
+        // --- 2. 旋轉並繪製水果/炸彈圖案 (覆蓋在上層，清晰無比) ---
         canvasCtx.rotate(item.rotation);
         canvasCtx.font = `${item.size}px serif`;
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'middle';
+
+        if (item.type === 'shiny') {
+          canvasCtx.shadowColor = '#fbbf24';
+          canvasCtx.shadowBlur = 12;
+        }
+
         canvasCtx.fillText(item.emoji, 0, 0);
 
         canvasCtx.restore();
