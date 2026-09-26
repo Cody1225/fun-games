@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>牛頓躲蘋果 - Newton Dodging Apples</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MediaPipe Face Mesh & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: #2b2118;
+            color: #fff8f0;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .font-game {
+            font-family: 'Fredoka One', 'Noto Sans TC', cursive;
+        }
+
+        /* 復古紙張/黑板風格 */
+        .chalkboard-panel {
+            background: rgba(40, 30, 20, 0.85);
+            border: 4px solid #d4a373;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5), inset 0 0 15px rgba(212, 163, 115, 0.2);
+            backdrop-filter: blur(8px);
+        }
+
+        .retro-btn {
+            background: linear-gradient(135deg, #e63946, #b71c1c);
+            border: 2px solid #ffb703;
+            box-shadow: 0 5px 0 #800f2f;
+            transition: all 0.1s ease;
+        }
+
+        .retro-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 7px 0 #800f2f;
+        }
+
+        .retro-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #800f2f;
+        }
+
+        /* 鏡頭鏡像處理 */
+        .mirror {
+            transform: scaleX(-1);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 overflow-hidden relative">
+
+    <!-- 頂部標題與狀態欄 -->
+    <header class="w-full max-w-4xl flex justify-between items-center mb-3 px-4 py-2 chalkboard-panel rounded-2xl z-10">
+        <div class="flex items-center space-x-2 sm:space-x-4">
+            <h1 class="text-xl sm:text-2xl font-black text-amber-300 font-game tracking-wider">🍎 牛頓躲蘋果</h1>
+            <span class="text-xs sm:text-sm bg-amber-900/60 text-amber-200 px-2 sm:px-3 py-1 rounded-full border border-amber-600/40">萬有引力特訓</span>
+        </div>
+        
+        <!-- HUD 資訊：生命、時間、速度 -->
+        <div class="flex items-center space-x-4 sm:space-x-6 font-game">
+            <div class="flex items-center space-x-1" id="lives-container">
+                <i class="fa-solid fa-heart text-red-500 text-lg sm:text-2xl animate-pulse"></i>
+                <i class="fa-solid fa-heart text-red-500 text-lg sm:text-2xl animate-pulse"></i>
+                <i class="fa-solid fa-heart text-red-500 text-lg sm:text-2xl animate-pulse"></i>
+            </div>
+            <div class="text-right">
+                <div class="text-xs text-amber-200/80 uppercase tracking-widest">撐過時間</div>
+                <div id="timer-display" class="text-lg sm:text-2xl font-bold text-yellow-400">00:00.00</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主遊戲畫面容器 -->
+    <main class="relative w-full max-w-4xl aspect-[4/3] max-h-[75vh] chalkboard-panel rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center border-4 border-amber-700/60">
+        <!-- 隱藏的原始 WebCam Video 元素 -->
+        <video id="webcam" class="hidden" playsinline></video>
+        
+        <!-- 遊戲主 Canvas -->
+        <canvas id="gameCanvas" class="w-full h-full object-cover mirror"></canvas>
+
+        <!-- 開始畫面 Modal -->
+        <div id="start-modal" class="absolute inset-0 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 transition-opacity duration-300">
+            <div class="max-w-md w-full bg-amber-950/90 border-2 border-amber-500/50 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6">
+                <div class="text-5xl sm:text-6xl animate-bounce">🧑‍🦱🍎</div>
+                <h2 class="text-2xl sm:text-3xl font-black text-amber-300 font-game">幫牛頓保護頭髮！</h2>
+                <p class="text-sm sm:text-base text-amber-100/90 leading-relaxed">
+                    允許相機權限後，系統將自動偵測您的頭部並戴上<span class="text-yellow-400 font-bold">牛頓捲髮</span>。<br>
+                    頭部左右移動，避免被隨機掉落的蘋果砸中頭髮！
+                </p>
+                <div class="bg-amber-900/50 p-3 rounded-xl text-xs text-amber-200/80 text-left space-y-1">
+                    <p><i class="fa-solid fa-shield-heart text-red-400 mr-1"></i> 生命值：初始 3 條命</p>
+                    <p><i class="fa-solid fa-gauge-high text-yellow-400 mr-1"></i> 難度升級：撐越久蘋果掉越快、數量越多！</p>
+                    <p><i class="fa-solid fa-lock text-green-400 mr-1"></i> 隱私承諾：影像僅在本地瀏覽器處理，不傳輸</p>
+                </div>
+                <button id="start-btn" class="retro-btn w-full py-4 rounded-2xl text-xl font-bold font-game text-white flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-video"></i>
+                    <span>開啟鏡頭，開始挑戰！</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 載入中動畫 -->
+        <div id="loading-overlay" class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-30 space-y-4">
+            <div class="w-16 h-16 border-4 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+            <p id="loading-text" class="text-amber-300 text-lg font-bold font-game">啟動 FaceMesh 頭部追蹤模型...</p>
+        </div>
+
+        <!-- 遊戲結束 Modal -->
+        <div id="gameover-modal" class="hidden absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20">
+            <div class="max-w-md w-full bg-amber-950/95 border-2 border-red-500/60 p-6 sm:p-8 rounded-3xl shadow-2xl space-y-5">
+                <div class="text-5xl text-red-500 animate-pulse"><i class="fa-solid fa-skull-crossbones"></i></div>
+                <h2 class="text-3xl font-black text-red-400 font-game">牛頓被蘋果砸爆了！</h2>
+                
+                <div class="bg-black/40 p-4 rounded-2xl border border-amber-600/30 space-y-2">
+                    <div class="text-xs text-amber-300/80 font-bold uppercase tracking-widest">本次生存時間</div>
+                    <div id="final-time" class="text-3xl font-black text-yellow-400 font-game">00:00.00</div>
+                    <div class="text-sm font-bold text-amber-200 mt-2" id="rank-badge">獲得稱號：載入中...</div>
+                </div>
+
+                <p id="rank-desc" class="text-xs text-amber-100/80 italic bg-amber-900/30 p-3 rounded-xl border border-amber-800/40">
+                    "地心引力真可怕..."
+                </p>
+
+                <button id="restart-btn" class="retro-btn w-full py-3.5 rounded-2xl text-lg font-bold font-game text-white flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>再試一次</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-3 text-xs text-amber-200/60 text-center font-medium">
+        物理樂趣網頁遊戲 - 運用 MediaPipe AI 實時臉部地標辨識
+    </footer>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('gameCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        
+        const startModal = document.getElementById('start-modal');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const gameoverModal = document.getElementById('gameover-modal');
+        
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const timerDisplay = document.getElementById('timer-display');
+        const livesContainer = document.getElementById('lives-container');
+        const finalTimeDisplay = document.getElementById('final-time');
+        const rankBadge = document.getElementById('rank-badge');
+        const rankDesc = document.getElementById('rank-desc');
+
+        // 遊戲狀態變數
+        let gameState = 'IDLE'; // IDLE, LOADING, PLAYING, GAMEOVER
+        let lives = 3;
+        let startTime = 0;
+        let elapsedTime = 0;
+        let animationFrameId = null;
+        let camera = null;
+        let faceMesh = null;
+
+        // 頭部及假髮資訊
+        let headPos = { x: 0, y: 0, width: 0, height: 0, angle: 0, detected: false };
+        let smoothedHead = { x: 0, y: 0, width: 0, angle: 0 }; // 濾鏡平滑滑動
+
+        // 蘋果陣列與產出參數
+        let apples = [];
+        let lastSpawnTime = 0;
+        let spawnInterval = 1200; // 毫秒
+        let baseAppleSpeed = 3.5;
+        
+        // 浮動受傷/效果粒子系統
+        let particles = [];
+
+        function resizeCanvas() {
+            const container = canvasElement.parentElement;
+            canvasElement.width = container.clientWidth;
+            canvasElement.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawNewtonWig(ctx, x, y, width, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            const scale = width / 180;
+            ctx.scale(scale, scale);
+
+            // 假髮底色 shadow/glow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 5;
+
+            // 假髮基底色 (典雅蓬鬆灰色/白捲髮)
+            ctx.fillStyle = '#e6e6e6';
+            ctx.strokeStyle = '#b0b0b0';
+            ctx.lineWidth = 3;
+
+            // 繪製左右兩側捲髮蓬鬆群
+            const curls = [
+                // 左側
+                {cx: -60, cy: 0, r: 32}, {cx: -80, cy: 25, r: 28}, {cx: -75, cy: 55, r: 24}, {cx: -55, cy: 75, r: 20},
+                // 右側
+                {cx: 60, cy: 0, r: 32}, {cx: 80, cy: 25, r: 28}, {cx: 75, cy: 55, r: 24}, {cx: 55, cy: 75, r: 20},
+                // 頂部蓬鬆層
+                {cx: -35, cy: -30, r: 35}, {cx: 0, cy: -40, r: 40}, {cx: 35, cy: -30, r: 35},
+                {cx: -20, cy: -15, r: 30}, {cx: 20, cy: -15, r: 30}
+            ];
+
+            // 繪製背景捲髮
+            curls.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+
+            // 捲髮高光細節線條
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            curls.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.cx - c.r*0.2, c.cy - c.r*0.2, c.r * 0.6, Math.PI * 1.1, Math.PI * 1.7);
+                ctx.stroke();
+            });
+
+            // 前額捲髮瀏海
+            ctx.fillStyle = '#f0f0f0';
+            ctx.beginPath();
+            ctx.arc(-15, -10, 22, 0, Math.PI * 2);
+            ctx.arc(15, -10, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawApple(ctx, apple) {
+            ctx.save();
+            ctx.translate(apple.x, apple.y);
+            ctx.rotate(apple.rotation);
+
+            const r = apple.radius;
+
+            // 蘋果本體
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            const grad = ctx.createRadialGradient(-r*0.3, -r*0.3, r*0.1, 0, 0, r);
+            grad.addColorStop(0, '#ff6b6b');
+            grad.addColorStop(0.8, '#ee5253');
+            grad.addColorStop(1, '#c0392b');
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = '#801010';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 蘋果梗
+            ctx.beginPath();
+            ctx.moveTo(0, -r + 2);
+            ctx.quadraticCurveTo(5, -r - 10, 8, -r - 14);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#5d4037';
+            ctx.stroke();
+
+            // 綠葉
+            ctx.beginPath();
+            ctx.ellipse(5, -r - 8, 7, 4, Math.PI / 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fill();
+
+            // 高光
+            ctx.beginPath();
+            ctx.arc(-r * 0.35, -r * 0.35, r * 0.25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function createExplosion(x, y) {
+            for (let i = 0; i < 16; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 6;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 3 + Math.random() * 5,
+                    color: Math.random() > 0.3 ? '#e63946' : '#ffb703',
+                    alpha: 1,
+                    life: 1.0
+                });
+            }
+        }
+
+        function updateAndDrawParticles(ctx) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.15; // 重力
+                p.alpha -= 0.03;
+                
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function onFaceMeshResults(results) {
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                
+                // 取得重要節點 (0: 嘴唇底, 10: 額頭頂, 234: 左臉頰, 454: 右臉頰)
+                const topHead = landmarks[10];
+                const chin = landmarks[152];
+                const leftFace = landmarks[234];
+                const rightFace = landmarks[454];
+
+                // 換算成 Canvas 座標（注意畫面為鏡像，x 坐標要做 1-x 反轉）
+                const canvasW = canvasElement.width;
+                const canvasH = canvasElement.height;
+
+                // 鏡像轉換 X 座標
+                const x = (1 - topHead.x) * canvasW;
+                const y = topHead.y * canvasH;
+
+                // 頭部寬度計算
+                const faceWidth = Math.hypot(
+                    (leftFace.x - rightFace.x) * canvasW,
+                    (leftFace.y - rightFace.y) * canvasH
+                );
+
+                // 計算旋轉角度 (左右傾斜度)
+                const dx = (rightFace.x - leftFace.x) * canvasW;
+                const dy = (rightFace.y - leftFace.y) * canvasH;
+                const angle = Math.atan2(dy, dx); // 角度調整
+
+                headPos = {
+                    x: x,
+                    y: y - faceWidth * 0.2, // 假髮往頭頂偏移
+                    width: faceWidth * 1.5, // 假髮比臉寬度稍大
+                    height: faceWidth * 1.2,
+                    angle: -angle, // 鏡像調轉角度
+                    detected: true
+                };
+            } else {
+                headPos.detected = false;
+            }
+        }
+
+        async function initCameraAndFaceMesh() {
+            loadingOverlay.classList.remove('hidden');
+            loadingText.innerText = "開啟網路攝影機...";
+
+            try {
+                faceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: false,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onFaceMeshResults);
+
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await faceMesh.send({ image: videoElement });
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                loadingText.innerText = "啟動 AI 辨識系統...";
+                await camera.start();
+                
+                loadingOverlay.classList.add('hidden');
+                startModal.classList.add('hidden');
+                
+                // 開始遊戲
+                startGame();
+            } catch (err) {
+                console.error(err);
+                alert('無法啟動攝影機，請確保已授權存取攝影機權限！');
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        function startGame() {
+            lives = 3;
+            apples = [];
+            particles = [];
+            updateLivesDisplay();
+            startTime = performance.now();
+            gameState = 'PLAYING';
+            
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        function updateLivesDisplay() {
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const heart = document.createElement('i');
+                if (i < lives) {
+                    heart.className = 'fa-solid fa-heart text-red-500 text-lg sm:text-2xl animate-pulse';
+                } else {
+                    heart.className = 'fa-regular fa-heart text-amber-700/60 text-lg sm:text-2xl';
+                }
+                livesContainer.appendChild(heart);
+            }
+        }
+
+        function spawnApple(now) {
+            // 隨時間加快產出頻率
+            const currentElapsedSec = (now - startTime) / 1000;
+            const dynamicInterval = Math.max(350, spawnInterval - currentElapsedSec * 35); // 最快 0.35s 顆
+
+            if (now - lastSpawnTime > dynamicInterval) {
+                const radius = 18 + Math.random() * 10;
+                const x = radius + Math.random() * (canvasElement.width - radius * 2);
+                const speed = baseAppleSpeed + (currentElapsedSec * 0.18) + (Math.random() * 1.5);
+                
+                apples.push({
+                    x: x,
+                    y: -radius * 2,
+                    radius: radius,
+                    speed: speed,
+                    rotation: Math.random() * Math.PI,
+                    vRot: (Math.random() - 0.5) * 0.1
+                });
+
+                lastSpawnTime = now;
+            }
+        }
+
+        function formatTime(ms) {
+            const totalSec = ms / 1000;
+            const mins = Math.floor(totalSec / 60);
+            const secs = Math.floor(totalSec % 60);
+            const millis = Math.floor((ms % 1000) / 10);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millis.toString().padStart(2, '0')}`;
+        }
+
+        function gameLoop(timestamp) {
+            if (gameState !== 'PLAYING') return;
+
+            const now = timestamp || performance.now();
+            elapsedTime = now - startTime;
+
+            // 更新計時器 UI
+            timerDisplay.innerText = formatTime(elapsedTime);
+
+            // 清除畫布
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 繪製視訊畫面背景
+            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+
+            // 背景調暗半透明襯托遊戲物件
+            canvasCtx.fillStyle = 'rgba(20, 15, 10, 0.25)';
+            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 平滑跟蹤頭部數據
+            if (headPos.detected) {
+                smoothedHead.x += (headPos.x - smoothedHead.x) * 0.3;
+                smoothedHead.y += (headPos.y - smoothedHead.y) * 0.3;
+                smoothedHead.width += (headPos.width - smoothedHead.width) * 0.3;
+                smoothedHead.angle += (headPos.angle - smoothedHead.angle) * 0.3;
+
+                // 繪製頭頂的牛頓假髮
+                drawNewtonWig(canvasCtx, smoothedHead.x, smoothedHead.y, smoothedHead.width, smoothedHead.angle);
+            }
+
+            // 產生蘋果
+            spawnApple(now);
+
+            // 定義假髮碰撞區塊範圍 (橢圓/圓形包覆)
+            const wigHitRadius = smoothedHead.width * 0.45;
+            const wigHitCenterX = smoothedHead.x;
+            const wigHitCenterY = smoothedHead.y;
+
+            // 繪製與更新蘋果
+            for (let i = apples.length - 1; i >= 0; i--) {
+                let a = apples[i];
+                a.y += a.speed;
+                a.rotation += a.vRot;
+
+                drawApple(canvasCtx, a);
+
+                // 碰撞檢測 (蘋果 vs 頭髮 hit area)
+                if (headPos.detected) {
+                    const dist = Math.hypot(a.x - wigHitCenterX, a.y - wigHitCenterY);
+                    if (dist < a.radius + wigHitRadius) {
+                        // 碰撞受傷！
+                        createExplosion(a.x, a.y);
+                        apples.splice(i, 1);
+                        
+                        lives--;
+                        updateLivesDisplay();
+
+                        // 畫面受傷閃紅光效果
+                        canvasCtx.fillStyle = 'rgba(230, 57, 70, 0.35)';
+                        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+                        if (lives <= 0) {
+                            endGame();
+                            return;
+                        }
+                        continue;
+                    }
+                }
+
+                // 超出邊界移除
+                if (a.y - a.radius > canvasElement.height + 50) {
+                    apples.splice(i, 1);
+                }
+            }
+
+            // 繪製粒子特效
+            updateAndDrawParticles(canvasCtx);
+
+            // 未偵測到頭部提示
+            if (!headPos.detected) {
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                canvasCtx.fillRect(canvasElement.width/2 - 150, 20, 300, 40);
+                canvasCtx.fillStyle = '#ffb703';
+                canvasCtx.font = 'bold 16px "Noto Sans TC"';
+                canvasCtx.textAlign = 'center';
+                canvasCtx.fillText('⚠️ 請將頭部位於鏡頭內！', canvasElement.width/2, 45);
+            }
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            const finalMs = elapsedTime;
+            const seconds = finalMs / 1000;
+
+            finalTimeDisplay.innerText = formatTime(finalMs);
+
+            // 根據秒數發放評價稱號
+            let rank = "";
+            let desc = "";
+
+            if (seconds < 10) {
+                rank = "🥉 萬有引力受害者";
+                desc = "「地心引力太強了...蘋果一下就把牛頓擊倒了！」";
+            } else if (seconds < 25) {
+                rank = "🥈 蘋果敏捷閃避者";
+                desc = "「不錯的反射神經！牛頓的頭髮保護得還算完好。」";
+            } else if (seconds < 45) {
+                rank = "🥇 經典物理學大師";
+                desc = "「太強了！你成功掌握了蘋果掉落軌跡的萬有引力公式！」";
+            } else {
+                rank = "🏆 宇宙級·重力主宰者";
+                desc = "「傳奇！牛頓在世都要向你的閃避動作致敬！」";
+            }
+
+            rankBadge.innerText = `稱號：${rank}`;
+            rankDesc.innerText = desc;
+
+            gameoverModal.classList.remove('hidden');
+        }
+
+        startBtn.addEventListener('click', () => {
+            initCameraAndFaceMesh();
+        });
+
+        restartBtn.addEventListener('click', () => {
+            gameoverModal.classList.add('hidden');
+            startGame();
+        });
+    </script>
+</body>
+</html>
