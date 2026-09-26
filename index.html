@@ -35,7 +35,7 @@
 
         /* 復古黑板面板 */
         .chalkboard-panel {
-            background: rgba(35, 25, 18, 0.92);
+            background: rgba(35, 25, 18, 0.94);
             border: 3px solid #d4a373;
             box-shadow: 0 8px 32px rgba(0,0,0,0.6), inset 0 0 15px rgba(212, 163, 115, 0.15);
             backdrop-filter: blur(8px);
@@ -58,6 +58,29 @@
         .mirror-canvas {
             transform: scaleX(-1);
         }
+
+        /* 自訂滾動條 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #d4a373;
+            border-radius: 4px;
+        }
+
+        /* 倒數動畫 */
+        @keyframes countdownPop {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+
+        .countdown-animate {
+            animation: countdownPop 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
     </style>
 </head>
 <body class="flex flex-col items-center justify-between p-2 sm:p-4 relative">
@@ -68,8 +91,11 @@
             <h1 class="text-lg sm:text-2xl font-black text-amber-300 font-game tracking-wider">🍎 牛頓躲蘋果</h1>
         </div>
         
-        <!-- HUD 資訊：生命值、生存時間 -->
-        <div class="flex items-center space-x-3 sm:space-x-6 font-game">
+        <!-- HUD 資訊：生命值、生存時間、靜音控制 -->
+        <div class="flex items-center space-x-3 sm:space-x-5 font-game">
+            <button id="sound-toggle-btn" class="text-amber-300 hover:text-amber-100 text-lg sm:text-xl p-1 focus:outline-none" title="靜音/開聲音">
+                <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+            </button>
             <div class="flex items-center space-x-1" id="lives-container">
                 <i class="fa-solid fa-heart text-red-500 text-base sm:text-xl animate-pulse"></i>
                 <i class="fa-solid fa-heart text-red-500 text-base sm:text-xl animate-pulse"></i>
@@ -82,19 +108,23 @@
         </div>
     </header>
 
-    <!-- 遊戲主畫面區域 (自動彈性適應 Mobile/Desktop 螢幕高度) -->
+    <!-- 遊戲主畫面區域 -->
     <main class="relative w-full max-w-3xl flex-1 chalkboard-panel rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center border-2 sm:border-4 border-amber-700/60 min-h-0">
         <!-- 隱藏 WebCam Video 元素 -->
         <video id="webcam" class="hidden" playsinline muted></video>
         
         <!-- 遊戲主 Canvas (加鏡像 style) -->
         <canvas id="gameCanvas" class="w-full h-full object-cover mirror-canvas"></canvas>
+        
+        <!-- 特效 Canvas (例如彩帶，不需鏡像) -->
+        <canvas id="fxCanvas" class="absolute inset-0 w-full h-full pointer-events-none z-20"></canvas>
 
         <!-- 開始遊戲 Modal -->
         <div id="start-modal" class="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center z-30 overflow-y-auto">
             <div class="max-w-md w-full bg-amber-950/95 border-2 border-amber-500/50 p-5 sm:p-7 rounded-3xl shadow-2xl space-y-4 my-auto">
                 <div class="text-4xl sm:text-6xl animate-bounce">🧑‍🦱🍎</div>
-                <h2 class="text-xl sm:text-3xl font-black text-amber-300 font-game">保護牛頓的假髮！</h2>
+                <!-- 需求 1: 修改為「小心掉落的蘋果!」 -->
+                <h2 class="text-xl sm:text-3xl font-black text-amber-300 font-game">小心掉落的蘋果!</h2>
                 <p class="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
                     請開啟鏡頭權限，遊戲將即時辨識您的頭部並帶上<span class="text-yellow-400 font-bold">牛頓假髮</span>。<br>
                     左右移動頭部，避免被上方隨機掉落的蘋果砸中！
@@ -102,7 +132,7 @@
                 <div class="bg-amber-900/50 p-2.5 sm:p-3 rounded-xl text-left text-xs text-amber-200/90 space-y-1 border border-amber-700/40">
                     <p><i class="fa-solid fa-heart text-red-400 mr-1.5"></i>生命：共 3 條生命</p>
                     <p><i class="fa-solid fa-gauge-high text-yellow-400 mr-1.5"></i>難度：撐越久蘋果掉越快</p>
-                    <p><i class="fa-solid fa-shield text-green-400 mr-1.5"></i>隱私：畫面僅在本地分析，不傳輸</p>
+                    <p><i class="fa-solid fa-circle-exclamation text-amber-400 mr-1.5"></i>注意：頭部超出鏡頭會自動暫停</p>
                 </div>
                 <button id="start-btn" type="button" class="retro-btn w-full py-3.5 sm:py-4 rounded-2xl text-base sm:text-xl font-bold font-game text-white flex items-center justify-center space-x-2 active:scale-95">
                     <i class="fa-solid fa-camera"></i>
@@ -117,23 +147,58 @@
             <p id="loading-text" class="text-amber-300 text-sm sm:text-lg font-bold font-game">正在啟動 FaceMesh 辨識模型...</p>
         </div>
 
+        <!-- 需求 2: 3-2-1 倒數 Overlay -->
+        <div id="countdown-overlay" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-30 pointer-events-none">
+            <div id="countdown-number" class="text-7xl sm:text-9xl font-black text-yellow-400 font-game drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">
+                3
+            </div>
+        </div>
+
+        <!-- 需求 3: 頭部超出鏡頭暫停 Overlay -->
+        <div id="pause-overlay" class="hidden absolute inset-0 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-25">
+            <div class="bg-amber-950/90 border-2 border-yellow-500/80 p-6 rounded-3xl shadow-2xl max-w-sm w-full space-y-3 animate-pulse">
+                <div class="text-5xl text-yellow-400">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                </div>
+                <h3 class="text-xl sm:text-2xl font-black text-amber-300 font-game">遊戲已暫停</h3>
+                <p class="text-sm text-amber-100/90">
+                    未偵測到頭部，請回到鏡頭範圍內！
+                </p>
+                <div class="text-xs text-amber-300/70 pt-2 border-t border-amber-800">
+                    偵測到頭部後將自動恢復遊戲
+                </div>
+            </div>
+        </div>
+
         <!-- 遊戲結束 Modal -->
-        <div id="gameover-modal" class="hidden absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center z-30 overflow-y-auto">
-            <div class="max-w-md w-full bg-amber-950/95 border-2 border-red-500/60 p-5 sm:p-7 rounded-3xl shadow-2xl space-y-4 my-auto">
-                <div class="text-4xl text-red-500 animate-pulse"><i class="fa-solid fa-skull-crossbones"></i></div>
-                <h2 class="text-2xl sm:text-3xl font-black text-red-400 font-game">頭髮被蘋果砸爆了！</h2>
+        <div id="gameover-modal" class="hidden absolute inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-5 text-center z-30 overflow-y-auto custom-scrollbar">
+            <div class="max-w-md w-full bg-amber-950/95 border-2 border-red-500/60 p-4 sm:p-6 rounded-3xl shadow-2xl space-y-3 my-auto">
+                <div id="gameover-icon" class="text-3xl sm:text-4xl text-red-500 animate-pulse">
+                    <i class="fa-solid fa-face-dizzy"></i>
+                </div>
+                <h2 id="gameover-title" class="text-xl sm:text-2xl font-black text-red-400 font-game">你被蘋果砸暈了!</h2>
                 
-                <div class="bg-black/40 p-3.5 rounded-2xl border border-amber-600/30 space-y-1">
-                    <div class="text-[10px] sm:text-xs text-amber-300/80 font-bold uppercase tracking-widest">生存時間</div>
-                    <div id="final-time" class="text-2xl sm:text-3xl font-black text-yellow-400 font-game">00:00.00</div>
-                    <div class="text-xs sm:text-sm font-bold text-amber-200 mt-1" id="rank-badge">稱號：載入中...</div>
+                <div id="new-record-banner" class="hidden bg-yellow-500/20 border border-yellow-400 text-yellow-300 text-xs font-bold py-1 px-3 rounded-full animate-bounce">
+                    🎉 恭喜刷新最高紀錄！
                 </div>
 
-                <p id="rank-desc" class="text-xs text-amber-100/80 italic bg-amber-900/30 p-2.5 rounded-xl border border-amber-800/40">
-                    "地心引力真可怕..."
-                </p>
+                <div class="bg-black/40 p-3 rounded-2xl border border-amber-600/30 space-y-1">
+                    <div class="text-[10px] sm:text-xs text-amber-300/80 font-bold uppercase tracking-widest">本次生存時間</div>
+                    <div id="final-time" class="text-2xl sm:text-3xl font-black text-yellow-400 font-game">00:00.00</div>
+                    <div class="text-xs font-bold text-amber-200" id="rank-badge">稱號：載入中...</div>
+                </div>
 
-                <button id="restart-btn" type="button" class="retro-btn w-full py-3.5 rounded-2xl text-base sm:text-lg font-bold font-game text-white flex items-center justify-center space-x-2 active:scale-95">
+                <!-- 排行榜 UI -->
+                <div class="bg-amber-900/40 p-3 rounded-2xl border border-amber-800/50 text-left">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-amber-300"><i class="fa-solid fa-trophy text-yellow-400 mr-1"></i>最高紀錄 TOP 5</span>
+                    </div>
+                    <div id="leaderboard-list" class="space-y-1 text-xs text-amber-100 font-mono">
+                        <!-- 動態插入排行榜項目 -->
+                    </div>
+                </div>
+
+                <button id="restart-btn" type="button" class="retro-btn w-full py-3 rounded-2xl text-base sm:text-lg font-bold font-game text-white flex items-center justify-center space-x-2 active:scale-95">
                     <i class="fa-solid fa-rotate-right"></i>
                     <span>再試一次</span>
                 </button>
@@ -146,27 +211,185 @@
     </footer>
 
     <script>
+        // Web Audio API 音效與音樂發聲器
+        class SoundSystem {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+                this.bgmTimer = null;
+                this.bgmStep = 0;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                if (this.muted) {
+                    this.stopBGM();
+                } else if (gameState === 'PLAYING') {
+                    this.startBGM();
+                }
+                return this.muted;
+            }
+
+            playTone(freq, type, duration, startVol = 0.1, endVol = 0) {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    
+                    gain.gain.setValueAtTime(startVol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(Math.max(endVol, 0.0001), this.ctx.currentTime + duration);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+
+            playClick() {
+                this.playTone(600, 'sine', 0.08, 0.15);
+            }
+
+            playCountdownBeep(isFinal = false) {
+                if (isFinal) {
+                    this.playTone(880, 'triangle', 0.25, 0.25);
+                } else {
+                    this.playTone(440, 'sine', 0.12, 0.2);
+                }
+            }
+
+            playHit() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    
+                    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.25);
+
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.25);
+                } catch(e){}
+            }
+
+            playGameOver() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+
+                    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.8);
+
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.8);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.8);
+                } catch(e){}
+            }
+
+            playVictory() {
+                if (this.muted || !this.ctx) return;
+                const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+                notes.forEach((freq, idx) => {
+                    setTimeout(() => {
+                        this.playTone(freq, 'triangle', 0.25, 0.2);
+                    }, idx * 90);
+                });
+            }
+
+            startBGM() {
+                if (this.muted || !this.ctx) return;
+                this.stopBGM();
+
+                const notes = [130.81, 164.81, 196.00, 164.81, 146.83, 174.61, 220.00, 174.61];
+                
+                const playStep = () => {
+                    if (this.muted || gameState !== 'PLAYING') return;
+                    
+                    const nowSec = totalAccumulatedTime / 1000;
+                    const speedFactor = Math.min(2.2, 1 + nowSec * 0.015); 
+                    const pitchMultiplier = Math.min(1.4, 1 + nowSec * 0.008);
+
+                    const freq = notes[this.bgmStep % notes.length] * pitchMultiplier;
+                    this.playTone(freq, 'sine', 0.12, 0.05);
+
+                    this.bgmStep++;
+                    const nextDelay = Math.max(120, 260 / speedFactor);
+                    this.bgmTimer = setTimeout(playStep, nextDelay);
+                };
+
+                playStep();
+            }
+
+            stopBGM() {
+                if (this.bgmTimer) {
+                    clearTimeout(this.bgmTimer);
+                    this.bgmTimer = null;
+                }
+            }
+        }
+
+        const audio = new SoundSystem();
+
         const videoElement = document.getElementById('webcam');
         const canvasElement = document.getElementById('gameCanvas');
         const canvasCtx = canvasElement.getContext('2d');
+        const fxCanvas = document.getElementById('fxCanvas');
+        const fxCtx = fxCanvas.getContext('2d');
         
         const startModal = document.getElementById('start-modal');
         const loadingOverlay = document.getElementById('loading-overlay');
         const loadingText = document.getElementById('loading-text');
+        const countdownOverlay = document.getElementById('countdown-overlay');
+        const countdownNumber = document.getElementById('countdown-number');
+        const pauseOverlay = document.getElementById('pause-overlay');
         const gameoverModal = document.getElementById('gameover-modal');
         
         const startBtn = document.getElementById('start-btn');
         const restartBtn = document.getElementById('restart-btn');
+        const soundToggleBtn = document.getElementById('sound-toggle-btn');
+        const soundIcon = document.getElementById('sound-icon');
+
         const timerDisplay = document.getElementById('timer-display');
         const livesContainer = document.getElementById('lives-container');
         const finalTimeDisplay = document.getElementById('final-time');
         const rankBadge = document.getElementById('rank-badge');
-        const rankDesc = document.getElementById('rank-desc');
+        const leaderboardList = document.getElementById('leaderboard-list');
+        const newRecordBanner = document.getElementById('new-record-banner');
 
-        let gameState = 'IDLE'; // IDLE, LOADING, PLAYING, GAMEOVER
+        let gameState = 'IDLE'; // IDLE, LOADING, COUNTDOWN, PLAYING, PAUSED, GAMEOVER
         let lives = 3;
-        let startTime = 0;
-        let elapsedTime = 0;
+        
+        // 精確計時（支援暫停）
+        let playStartTime = 0;
+        let totalAccumulatedTime = 0;
+        
         let animationFrameId = null;
         let camera = null;
         let faceMesh = null;
@@ -175,12 +398,13 @@
         let headPos = { x: 0, y: 0, width: 0, height: 0, angle: 0, detected: false };
         let smoothedHead = { x: 0, y: 0, width: 0, angle: 0 };
 
-        // 蘋果物件與掉落速度控制
+        // 蘋果與粒子
         let apples = [];
         let lastSpawnTime = 0;
         let spawnInterval = 1100;
         let baseAppleSpeed = 3.2;
         let particles = [];
+        let confettiParticles = [];
 
         function resizeCanvas() {
             const container = canvasElement.parentElement;
@@ -189,6 +413,10 @@
             canvasElement.width = container.clientWidth * dpr;
             canvasElement.height = container.clientHeight * dpr;
             canvasCtx.scale(dpr, dpr);
+
+            fxCanvas.width = container.clientWidth * dpr;
+            fxCanvas.height = container.clientHeight * dpr;
+            fxCtx.scale(dpr, dpr);
         }
 
         window.addEventListener('resize', resizeCanvas);
@@ -203,12 +431,10 @@
             const scale = width / 180;
             ctx.scale(scale, scale);
 
-            // 陰影
             ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
             ctx.shadowBlur = 8;
             ctx.shadowOffsetY = 4;
 
-            // 蓬鬆捲髮結構
             ctx.fillStyle = '#f0f0f0';
             ctx.strokeStyle = '#c0c0c0';
             ctx.lineWidth = 3;
@@ -227,7 +453,6 @@
                 ctx.stroke();
             });
 
-            // 高光細節
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             curls.forEach(c => {
@@ -246,7 +471,6 @@
 
             const r = apple.radius;
 
-            // 蘋果本體
             ctx.beginPath();
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             const grad = ctx.createRadialGradient(-r*0.3, -r*0.3, r*0.1, 0, 0, r);
@@ -259,7 +483,6 @@
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // 蘋果梗
             ctx.beginPath();
             ctx.moveTo(0, -r + 2);
             ctx.quadraticCurveTo(5, -r - 10, 8, -r - 14);
@@ -267,13 +490,11 @@
             ctx.strokeStyle = '#5d4037';
             ctx.stroke();
 
-            // 綠葉
             ctx.beginPath();
             ctx.ellipse(5, -r - 8, 6, 3.5, Math.PI / 4, 0, Math.PI * 2);
             ctx.fillStyle = '#2ecc71';
             ctx.fill();
 
-            // 高光
             ctx.beginPath();
             ctx.arc(-r * 0.35, -r * 0.35, r * 0.25, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
@@ -293,32 +514,121 @@
                     vy: Math.sin(angle) * speed,
                     radius: 3 + Math.random() * 4,
                     color: Math.random() > 0.3 ? '#e63946' : '#ffb703',
-                    alpha: 1,
-                    life: 1.0
+                    alpha: 1
                 });
             }
         }
 
-        function updateAndDrawParticles(ctx) {
-            for (let i = particles.length - 1; i >= 0; i--) {
-                let p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.vy += 0.15;
-                p.alpha -= 0.035;
-                
-                if (p.alpha <= 0) {
-                    particles.splice(i, 1);
-                    continue;
-                }
+        function triggerConfetti() {
+            const container = canvasElement.parentElement;
+            const renderW = container.clientWidth;
+            
+            confettiParticles = [];
+            const colors = ['#f94144', '#f3722c', '#f8961e', '#f9c74f', '#90be6d', '#43aa8b', '#577590'];
 
-                ctx.save();
-                ctx.globalAlpha = p.alpha;
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+            for (let i = 0; i < 90; i++) {
+                confettiParticles.push({
+                    x: Math.random() * renderW,
+                    y: -20 - Math.random() * 50,
+                    w: 6 + Math.random() * 6,
+                    h: 10 + Math.random() * 8,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: 2 + Math.random() * 4,
+                    rotation: Math.random() * Math.PI * 2,
+                    vRot: (Math.random() - 0.5) * 0.2,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    life: 1.0
+                });
+            }
+
+            function updateConfetti() {
+                const container = canvasElement.parentElement;
+                const renderW = container.clientWidth;
+                const renderH = container.clientHeight;
+
+                fxCtx.clearRect(0, 0, renderW, renderH);
+
+                let alive = false;
+                confettiParticles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.rotation += p.vRot;
+                    p.life -= 0.006;
+
+                    if (p.life > 0 && p.y < renderH + 20) {
+                        alive = true;
+                        fxCtx.save();
+                        fxCtx.translate(p.x, p.y);
+                        fxCtx.rotate(p.rotation);
+                        fxCtx.globalAlpha = Math.max(0, p.life);
+                        fxCtx.fillStyle = p.color;
+                        fxCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                        fxCtx.restore();
+                    }
+                });
+
+                if (alive) {
+                    requestAnimationFrame(updateConfetti);
+                } else {
+                    fxCtx.clearRect(0, 0, renderW, renderH);
+                }
+            }
+
+            updateConfetti();
+        }
+
+        function getHighScores() {
+            try {
+                const data = localStorage.getItem('newton_apple_scores');
+                return data ? JSON.parse(data) : [];
+            } catch(e) { return []; }
+        }
+
+        function saveHighScore(ms) {
+            const scores = getHighScores();
+            const dateStr = new Date().toLocaleDateString();
+            scores.push({ time: ms, date: dateStr });
+            scores.sort((a, b) => b.time - a.time);
+            const top5 = scores.slice(0, 5);
+            
+            try {
+                localStorage.setItem('newton_apple_scores', JSON.stringify(top5));
+            } catch(e) {}
+
+            return top5;
+        }
+
+        function updateLeaderboardUI(currentMs) {
+            const scores = getHighScores();
+            const isNewBest = scores.length === 0 || currentMs > scores[0].time;
+            const updatedTop5 = saveHighScore(currentMs);
+
+            leaderboardList.innerHTML = '';
+            
+            updatedTop5.forEach((item, index) => {
+                const isCurrent = item.time === currentMs;
+                const row = document.createElement('div');
+                row.className = `flex justify-between items-center px-2 py-1 rounded ${isCurrent ? 'bg-amber-500/30 font-bold border border-amber-400/50' : 'bg-black/20'}`;
+                
+                let medal = `${index + 1}.`;
+                if (index === 0) medal = '🥇';
+                if (index === 1) medal = '🥈';
+                if (index === 2) medal = '🥉';
+
+                row.innerHTML = `
+                    <span>${medal} ${formatTime(item.time)} ${isCurrent ? '<span class="text-[9px] text-yellow-300 ml-1">(本次)</span>' : ''}</span>
+                    <span class="text-[10px] text-amber-300/60">${item.date}</span>
+                `;
+                leaderboardList.appendChild(row);
+            });
+
+            if (isNewBest && currentMs > 1000) {
+                newRecordBanner.classList.remove('hidden');
+                triggerConfetti();
+                audio.playVictory();
+            } else {
+                newRecordBanner.classList.add('hidden');
+                audio.playGameOver();
             }
         }
 
@@ -334,8 +644,6 @@
                 const renderW = container.clientWidth;
                 const renderH = container.clientHeight;
 
-                // 由於 Canvas CSS 設定了 scaleX(-1) 進行視覺鏡像，
-                // 計算 X 座標時保持原始 x * renderW，便能與圖像呈現完全正確一致的移動方向！
                 const x = topHead.x * renderW;
                 const y = topHead.y * renderH;
 
@@ -348,16 +656,35 @@
                 const dy = (rightFace.y - leftFace.y) * renderH;
                 const angle = Math.atan2(dy, dx);
 
-                headPos = {
-                    x: x,
-                    y: y - faceWidth * 0.22,
-                    width: faceWidth * 1.55,
-                    height: faceWidth * 1.2,
-                    angle: angle,
-                    detected: true
-                };
+                // 判斷頭部是否在合理範圍內
+                const inBounds = (topHead.x >= 0.02 && topHead.x <= 0.98 && topHead.y >= 0.02 && topHead.y <= 0.98);
+
+                if (inBounds) {
+                    headPos = {
+                        x: x,
+                        y: y - faceWidth * 0.22,
+                        width: faceWidth * 1.55,
+                        height: faceWidth * 1.2,
+                        angle: angle,
+                        detected: true
+                    };
+
+                    // 需求 3: 如果之前因為離場暫停，當頭部重新進入時自動恢復遊戲
+                    if (gameState === 'PAUSED') {
+                        resumeGame();
+                    }
+                } else {
+                    headPos.detected = false;
+                    if (gameState === 'PLAYING') {
+                        pauseGame();
+                    }
+                }
             } else {
                 headPos.detected = false;
+                // 需求 3: 未偵測到頭部時觸發暫停
+                if (gameState === 'PLAYING') {
+                    pauseGame();
+                }
             }
         }
 
@@ -395,7 +722,7 @@
                 loadingOverlay.classList.add('hidden');
                 startModal.classList.add('hidden');
                 
-                startGame();
+                startCountdownThenPlay();
             } catch (err) {
                 console.error(err);
                 alert('無法啟動鏡頭，請確認是否已授權相機權限！');
@@ -403,14 +730,73 @@
             }
         }
 
-        function startGame() {
+        // 需求 2: 3-2-1 倒數動畫
+        function startCountdownThenPlay() {
+            gameState = 'COUNTDOWN';
             lives = 3;
             apples = [];
             particles = [];
+            totalAccumulatedTime = 0;
             updateLivesDisplay();
-            startTime = performance.now();
+            timerDisplay.innerText = "00:00.00";
+
+            countdownOverlay.classList.remove('hidden');
+            let count = 3;
+
+            const updateCountdownUI = () => {
+                countdownNumber.innerText = count > 0 ? count : "GO!";
+                countdownNumber.classList.remove('countdown-animate');
+                void countdownNumber.offsetWidth; // 強制重繪觸發 CSS 動畫
+                countdownNumber.classList.add('countdown-animate');
+                
+                audio.playCountdownBeep(count === 0);
+            };
+
+            updateCountdownUI();
+
+            const interval = setInterval(() => {
+                count--;
+                if (count >= 0) {
+                    updateCountdownUI();
+                } else {
+                    clearInterval(interval);
+                    countdownOverlay.classList.add('hidden');
+                    startGame();
+                }
+            }, 900);
+        }
+
+        function startGame() {
             gameState = 'PLAYING';
+            playStartTime = performance.now();
+            lastSpawnTime = performance.now();
+            audio.startBGM();
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        // 需求 3: 暫停機制
+        function pauseGame() {
+            if (gameState !== 'PLAYING') return;
+            gameState = 'PAUSED';
             
+            // 累加已遊玩時間
+            totalAccumulatedTime += performance.now() - playStartTime;
+            
+            audio.stopBGM();
+            pauseOverlay.classList.remove('hidden');
+        }
+
+        // 需求 3: 恢復機制
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            pauseOverlay.classList.add('hidden');
+            gameState = 'PLAYING';
+            playStartTime = performance.now();
+            lastSpawnTime = performance.now();
+            audio.startBGM();
+
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             gameLoop();
         }
@@ -432,7 +818,7 @@
             const container = canvasElement.parentElement;
             const renderW = container.clientWidth;
 
-            const currentElapsedSec = (now - startTime) / 1000;
+            const currentElapsedSec = totalAccumulatedTime / 1000;
             const dynamicInterval = Math.max(300, spawnInterval - currentElapsedSec * 35);
 
             if (now - lastSpawnTime > dynamicInterval) {
@@ -465,9 +851,10 @@
             if (gameState !== 'PLAYING') return;
 
             const now = timestamp || performance.now();
-            elapsedTime = now - startTime;
+            const currentSessionTime = now - playStartTime;
+            const currentTotalMs = totalAccumulatedTime + currentSessionTime;
 
-            timerDisplay.innerText = formatTime(elapsedTime);
+            timerDisplay.innerText = formatTime(currentTotalMs);
 
             const container = canvasElement.parentElement;
             const renderW = container.clientWidth;
@@ -494,12 +881,12 @@
 
             spawnApple(now);
 
-            // 定義假髮碰撞區
+            // 假髮碰撞區域
             const wigHitRadius = smoothedHead.width * 0.42;
             const wigHitCenterX = smoothedHead.x;
             const wigHitCenterY = smoothedHead.y;
 
-            // 更新並繪製蘋果
+            // 更新與繪製蘋果
             for (let i = apples.length - 1; i >= 0; i--) {
                 let a = apples[i];
                 a.y += a.speed;
@@ -516,11 +903,13 @@
                         
                         lives--;
                         updateLivesDisplay();
+                        audio.playHit();
 
                         canvasCtx.fillStyle = 'rgba(230, 57, 70, 0.4)';
                         canvasCtx.fillRect(0, 0, renderW, renderH);
 
                         if (lives <= 0) {
+                            totalAccumulatedTime = currentTotalMs;
                             endGame();
                             return;
                         }
@@ -533,22 +922,25 @@
                 }
             }
 
-            updateAndDrawParticles(canvasCtx);
+            // 更新爆炸粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.15;
+                p.alpha -= 0.035;
+                
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
 
-            // 未偵測到頭部提示 (因 Canvas scaled -1，文字需獨立反轉繪製)
-            if (!headPos.detected) {
                 canvasCtx.save();
-                canvasCtx.translate(renderW / 2, 35);
-                canvasCtx.scale(-1, 1);
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                canvasCtx.globalAlpha = p.alpha;
+                canvasCtx.fillStyle = p.color;
                 canvasCtx.beginPath();
-                canvasCtx.roundRect(-120, -18, 240, 36, 12);
+                canvasCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 canvasCtx.fill();
-                canvasCtx.fillStyle = '#ffb703';
-                canvasCtx.font = 'bold 14px "Noto Sans TC"';
-                canvasCtx.textAlign = 'center';
-                canvasCtx.textBaseline = 'middle';
-                canvasCtx.fillText('⚠️ 請將頭部位於鏡頭內！', 0, 0);
                 canvasCtx.restore();
             }
 
@@ -557,48 +949,48 @@
 
         function endGame() {
             gameState = 'GAMEOVER';
-            const finalMs = elapsedTime;
+            audio.stopBGM();
+
+            const finalMs = totalAccumulatedTime;
             const seconds = finalMs / 1000;
 
             finalTimeDisplay.innerText = formatTime(finalMs);
 
             let rank = "";
-            let desc = "";
-
-            if (seconds < 10) {
-                rank = "🥉 萬有引力受害者";
-                desc = "「地心引力太強了...蘋果一下就把牛頓擊倒了！」";
-            } else if (seconds < 25) {
-                rank = "🥈 蘋果敏捷閃避者";
-                desc = "「不錯的反射神經！牛頓的頭髮保護得還算完好。」";
-            } else if (seconds < 45) {
-                rank = "🥇 經典物理學大師";
-                desc = "「太強了！你成功掌握了蘋果掉落軌跡的萬有引力公式！」";
-            } else {
-                rank = "🏆 宇宙級·重力主宰者";
-                desc = "「傳奇！牛頓在世都要向你的閃避動作致敬！」";
-            }
+            if (seconds < 10) rank = "🥉 萬有引力受害者";
+            else if (seconds < 25) rank = "🥈 蘋果敏捷閃避者";
+            else if (seconds < 45) rank = "🥇 經典物理學大師";
+            else rank = "🏆 宇宙級·重力主宰者";
 
             rankBadge.innerText = `稱號：${rank}`;
-            rankDesc.innerText = desc;
+
+            updateLeaderboardUI(finalMs);
 
             gameoverModal.classList.remove('hidden');
         }
 
-        // 綁定按鈕點擊與觸控事件，確保手機瀏覽器精準觸發
         const handleStart = (e) => {
             if (e) e.preventDefault();
+            audio.init();
+            audio.playClick();
             initCameraAndFaceMesh();
         };
 
         const handleRestart = (e) => {
             if (e) e.preventDefault();
+            audio.playClick();
             gameoverModal.classList.add('hidden');
-            startGame();
+            startCountdownThenPlay();
         };
 
         startBtn.addEventListener('click', handleStart);
         restartBtn.addEventListener('click', handleRestart);
+
+        soundToggleBtn.addEventListener('click', () => {
+            audio.init();
+            const isMuted = audio.toggleMute();
+            soundIcon.className = isMuted ? "fa-solid fa-volume-xmark text-red-400" : "fa-solid fa-volume-high text-amber-300";
+        });
     </script>
 </body>
 </html>
