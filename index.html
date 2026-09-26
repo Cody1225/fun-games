@@ -121,7 +121,7 @@
             <span class="text-2xl p-2 bg-yellow-500/10 rounded-xl">✨</span>
             <div>
               <p class="font-bold text-amber-300">閃亮水果 (+3分)</p>
-              <p class="text-xs text-slate-400">隨機出現發光水果，接中獲得高分！</p>
+              <p class="text-xs text-slate-400">隨機出現帶金屬光暈水果，接中獲得高分！</p>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -344,19 +344,17 @@
     let score = 0;
     let lives = 3;
     let lastSpawnTime = 0;
-    let spawnInterval = 1200;
+    let spawnInterval = 1200; // 初始發送間隔
     let headX = null;
     let headY = null;
     let headWidth = 100;
     let cameraInstance = null;
     let faceMesh = null;
-    let mediaStream = null;
 
     let items = [];
     let particles = [];
     let floatTexts = [];
 
-    // 掉落水果清單
     const FRUIT_EMOJIS = ['🍎', '🍌', '🍊', '🍓', '🍉'];
 
     function resizeCanvas() {
@@ -427,14 +425,11 @@
     function getRandomItemType() {
       const rand = Math.random();
       if (rand < 0.12) {
-        // 12% 炸彈
         return { type: 'bomb', emoji: '💣', pts: 0 };
       } else if (rand < 0.22) {
-        // 10% 閃亮水果 (+3分)
         const fruitEmoji = FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
         return { type: 'shiny', emoji: fruitEmoji, pts: 3 };
       } else {
-        // 普通水果 (+1分)
         const fruitEmoji = FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
         return { type: 'fruit', emoji: fruitEmoji, pts: 1 };
       }
@@ -497,12 +492,14 @@
     }
 
     async function startGame() {
+      // 徹底重置分數、生命與掉落速度
       score = 0;
       lives = 3;
       items = [];
       particles = [];
       floatTexts = [];
-      spawnInterval = 1200;
+      spawnInterval = 1200; // 重置掉落頻率為初始狀態
+      lastSpawnTime = Date.now();
 
       scoreDisplay.textContent = '0';
       updateLivesUI();
@@ -511,7 +508,6 @@
       gameoverModal.classList.add('hidden');
       hud.classList.remove('opacity-0');
 
-      // 啟動鏡頭串流
       await startCamera();
       startCountdown();
     }
@@ -530,7 +526,6 @@
       sounds.stopBGM();
       sounds.playGameOver();
 
-      // 完全關閉攝影機串流以節省效能
       stopCamera();
 
       finalScoreDisplay.textContent = score;
@@ -594,7 +589,9 @@
 
         const currentHeadX = (1 - topHead.x) * width;
         const currentHeadY = topHead.y * height;
-        const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.6;
+        
+        // 精確匹配頭部寬度
+        const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.0;
 
         headX = headX === null ? currentHeadX : headX + (currentHeadX - headX) * 0.4;
         headY = headY === null ? currentHeadY : headY + (currentHeadY - headY) * 0.4;
@@ -606,7 +603,7 @@
           sounds.startBGM();
         }
 
-        // 繪製 Emoji 竹籃 🧺
+        // 繪製微型等寬 Emoji 竹籃 🧺
         drawBasketEmoji(headX, headY, headWidth);
 
       } else {
@@ -625,9 +622,10 @@
       drawFloatTexts();
     }
 
-    // --- 繪製 Emoji 竹籃 🧺 ---
+    // --- 繪製縮小版頭部等寬 Emoji 竹籃 🧺 ---
     function drawBasketEmoji(x, y, width) {
-      const size = Math.max(90, width * 1.1);
+      // 籃子大小精確等於頭部寬度
+      const size = Math.max(60, width);
       const basketY = y - size * 0.35;
 
       canvasCtx.save();
@@ -635,10 +633,9 @@
       canvasCtx.textAlign = 'center';
       canvasCtx.textBaseline = 'middle';
 
-      // 加一點立體陰影
-      canvasCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      canvasCtx.shadowBlur = 12;
-      canvasCtx.shadowOffsetY = 6;
+      canvasCtx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      canvasCtx.shadowBlur = 8;
+      canvasCtx.shadowOffsetY = 4;
 
       canvasCtx.fillText('🧺', x, basketY);
       canvasCtx.restore();
@@ -647,27 +644,28 @@
     function updateGameObjects(width, height) {
       const now = Date.now();
 
-      if (spawnInterval > 500) {
-        spawnInterval = 1200 - score * 15;
-      }
+      // 隨著分數合理加快頻率，最低不小於 450ms
+      spawnInterval = Math.max(450, 1200 - score * 12);
 
       if (now - lastSpawnTime > spawnInterval) {
         const itemType = getRandomItemType();
         items.push({
           x: Math.random() * (width - 60) + 30,
           y: -40,
-          speed: Math.random() * 2 + 3 + (score * 0.05),
+          // 下落基礎速度固定 3.5 ~ 5.5，隨分數輕微提升
+          speed: Math.random() * 2 + 3.5 + Math.min(score * 0.04, 3.5),
           type: itemType.type,
           emoji: itemType.emoji,
           pts: itemType.pts,
-          size: itemType.type === 'shiny' ? 48 : 40,
+          size: itemType.type === 'shiny' ? 44 : 38,
           rotation: Math.random() * Math.PI,
           rotSpeed: (Math.random() - 0.5) * 0.08
         });
         lastSpawnTime = now;
       }
 
-      const basketSize = Math.max(90, headWidth * 1.1);
+      // 接水果判定區域以縮小後的籃子尺寸為準
+      const basketSize = Math.max(60, headWidth);
       const basketY = headY - basketSize * 0.35;
 
       for (let i = items.length - 1; i >= 0; i--) {
@@ -677,18 +675,31 @@
 
         canvasCtx.save();
         canvasCtx.translate(item.x, item.y);
-        canvasCtx.rotate(item.rotation);
 
-        // 如果是發光水果，繪製強烈金光與星光✨
+        // 如果是發光水果，繪製金色圓形光暈背景
         if (item.type === 'shiny') {
-          canvasCtx.shadowColor = '#ffd700';
-          canvasCtx.shadowBlur = 25;
-          // 周圍加上星光背景
-          canvasCtx.font = '24px serif';
-          canvasCtx.fillText('✨', -20, -15);
-          canvasCtx.fillText('✨', 20, 15);
+          // 圓形光暈背景
+          const haloGrad = canvasCtx.createRadialGradient(0, 0, 5, 0, 0, 32);
+          haloGrad.addColorStop(0, 'rgba(255, 223, 0, 0.95)');
+          haloGrad.addColorStop(0.6, 'rgba(245, 158, 11, 0.6)');
+          haloGrad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+
+          canvasCtx.beginPath();
+          canvasCtx.arc(0, 0, 32, 0, Math.PI * 2);
+          canvasCtx.fillStyle = haloGrad;
+          canvasCtx.fill();
+
+          // 陰影強發光
+          canvasCtx.shadowColor = '#fbbf24';
+          canvasCtx.shadowBlur = 15;
+
+          // 周圍小星光
+          canvasCtx.font = '16px serif';
+          canvasCtx.fillText('✨', -22, -16);
+          canvasCtx.fillText('✨', 22, 16);
         }
 
+        canvasCtx.rotate(item.rotation);
         canvasCtx.font = `${item.size}px serif`;
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'middle';
@@ -699,7 +710,7 @@
         const dx = item.x - headX;
         const dy = item.y - basketY;
         const inHorizontal = Math.abs(dx) < basketSize / 2;
-        const inVertical = Math.abs(dy) < 25;
+        const inVertical = Math.abs(dy) < 22;
 
         if (inHorizontal && inVertical) {
           if (item.type === 'bomb') {
