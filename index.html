@@ -32,16 +32,6 @@
       animation: pulse-fast 0.6s infinite ease-in-out;
     }
 
-    @keyframes shine {
-      0% { filter: drop-shadow(0 0 5px #ffd700) brightness(1.2); transform: scale(1) rotate(0deg); }
-      50% { filter: drop-shadow(0 0 20px #fff700) brightness(1.6); transform: scale(1.1) rotate(5deg); }
-      100% { filter: drop-shadow(0 0 5px #ffd700) brightness(1.2); transform: scale(1) rotate(0deg); }
-    }
-
-    .shiny-item {
-      animation: shine 0.8s infinite ease-in-out;
-    }
-
     .custom-scrollbar::-webkit-scrollbar {
       width: 6px;
     }
@@ -117,7 +107,7 @@
             <span class="text-2xl p-2 bg-amber-500/10 rounded-xl">🧺</span>
             <div>
               <p class="font-bold text-slate-100">戴上竹籃</p>
-              <p class="text-xs text-slate-400">頭部左右移動操控頭頂的竹籃</p>
+              <p class="text-xs text-slate-400">頭部左右移動操控頭頂的立體竹籃</p>
             </div>
           </div>
           <div class="flex items-center gap-3">
@@ -152,8 +142,9 @@
     <!-- 遊戲結束 MODAL -->
     <div id="gameover-modal" class="absolute inset-0 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-between p-6 z-30 text-center hidden overflow-y-auto custom-scrollbar">
       <div class="my-auto flex flex-col items-center max-w-md w-full py-4">
-        <div class="text-6xl mb-2">😵‍💫</div>
-        <h2 class="text-3xl font-black text-red-400 mb-1">你被蘋果砸暈了!</h2>
+        <div class="text-6xl mb-2">🏁</div>
+        <!-- 結算標題修改為「遊戲結束」 -->
+        <h2 class="text-3xl font-black text-amber-400 mb-1">遊戲結束</h2>
         <p class="text-slate-400 text-sm mb-4">生命值已耗盡</p>
 
         <!-- 本次得分 -->
@@ -192,7 +183,6 @@
         this.ctx = null;
         this.muted = false;
         this.bgmTimer = null;
-        this.bgmNoteIndex = 0;
       }
 
       init() {
@@ -229,14 +219,12 @@
         } catch (e) {}
       }
 
-      // 接到普通水果音效
       playCatch() {
         this.init();
-        this.playTone(523.25, 'sine', 0.1, 0, 0.15); // C5
-        this.playTone(659.25, 'sine', 0.15, 0.08, 0.15); // E5
+        this.playTone(523.25, 'sine', 0.1, 0, 0.15);
+        this.playTone(659.25, 'sine', 0.15, 0.08, 0.15);
       }
 
-      // 接到閃光水果音效 (+3分)
       playCatchShiny() {
         this.init();
         this.playTone(523.25, 'triangle', 0.1, 0, 0.2);
@@ -245,7 +233,6 @@
         this.playTone(1046.50, 'triangle', 0.25, 0.18, 0.25);
       }
 
-      // 漏接/受傷音效
       playHurt() {
         this.init();
         if (this.muted || !this.ctx) return;
@@ -264,7 +251,6 @@
         } catch(e) {}
       }
 
-      // 炸彈爆炸音效
       playExplosion() {
         this.init();
         if (this.muted || !this.ctx) return;
@@ -283,13 +269,11 @@
         } catch(e) {}
       }
 
-      // 倒數音效
       playBeep(isFinal = false) {
         this.init();
         this.playTone(isFinal ? 880 : 440, 'sine', 0.15, 0, 0.2);
       }
 
-      // 遊戲結束音效
       playGameOver() {
         this.init();
         if (this.muted || !this.ctx) return;
@@ -299,7 +283,6 @@
         });
       }
 
-      // 打破紀錄音效
       playRecord() {
         this.init();
         if (this.muted || !this.ctx) return;
@@ -309,7 +292,6 @@
         });
       }
 
-      // 簡單 8-bit 背景音樂循環
       startBGM() {
         this.stopBGM();
         if (this.muted) return;
@@ -335,7 +317,7 @@
 
     const sounds = new SoundController();
 
-    // --- DOM 元素引用 ---
+    // --- DOM 引用 ---
     const videoElement = document.getElementById('input-video');
     const canvasElement = document.getElementById('game-canvas');
     const canvasCtx = canvasElement.getContext('2d');
@@ -358,12 +340,12 @@
     const countdownText = document.getElementById('countdown-text');
     const pauseOverlay = document.getElementById('pause-overlay');
 
-    // --- 遊戲狀態變數 ---
-    let gameState = 'START'; // 'START', 'COUNTDOWN', 'PLAYING', 'PAUSED', 'GAMEOVER'
+    // --- 遊戲變數 ---
+    let gameState = 'START';
     let score = 0;
     let lives = 3;
     let lastSpawnTime = 0;
-    let spawnInterval = 1200; // 掉落物生成間隔 (ms)
+    let spawnInterval = 1200;
     let headX = null;
     let headY = null;
     let headWidth = 100;
@@ -374,18 +356,16 @@
     let particles = [];
     let floatTexts = [];
 
-    // 掉落物設定 (一般水果 + 閃亮水果 + 炸彈)
     const ITEM_TYPES = [
       { type: 'fruit', emoji: '🍎', pts: 1, weight: 25 },
       { type: 'fruit', emoji: '🍌', pts: 1, weight: 25 },
       { type: 'fruit', emoji: '🍊', pts: 1, weight: 20 },
       { type: 'fruit', emoji: '🍓', pts: 1, weight: 15 },
       { type: 'fruit', emoji: '🍉', pts: 1, weight: 10 },
-      { type: 'shiny', emoji: '🌟', pts: 3, weight: 8 },  // 閃亮高分水果
-      { type: 'bomb',  emoji: '💣', pts: 0, weight: 12 }  // 炸彈
+      { type: 'shiny', emoji: '🌟', pts: 3, weight: 8 },
+      { type: 'bomb',  emoji: '💣', pts: 0, weight: 12 }
     ];
 
-    // Canvas 視埠自動適應與畫質優化
     function resizeCanvas() {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvasElement.getBoundingClientRect();
@@ -396,7 +376,6 @@
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // --- 排行榜 localStorage 處理 (Top 5 得分) ---
     function getLeaderboard() {
       try {
         const data = localStorage.getItem('fruit_catch_leaderboard');
@@ -447,13 +426,11 @@
       });
     }
 
-    // --- 音效按鈕綁定 ---
     soundBtn.addEventListener('click', () => {
       const isMuted = sounds.toggleMute();
       soundIcon.textContent = isMuted ? '🔇' : '🔊';
     });
 
-    // --- 隨機加權選擇掉落物 ---
     function getRandomItemType() {
       const totalWeight = ITEM_TYPES.reduce((acc, curr) => acc + curr.weight, 0);
       let rand = Math.random() * totalWeight;
@@ -464,7 +441,6 @@
       return ITEM_TYPES[0];
     }
 
-    // --- 浮動得分文字特效 ---
     function addFloatText(text, x, y, color = '#f59e0b') {
       floatTexts.push({
         text, x, y, color,
@@ -473,7 +449,6 @@
       });
     }
 
-    // --- 粒子特效 (爆裂) ---
     function createParticles(x, y, color, count = 12) {
       for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
@@ -489,7 +464,6 @@
       }
     }
 
-    // --- 3-2-1 倒數動畫 ---
     function startCountdown(onComplete) {
       gameState = 'COUNTDOWN';
       countdownOverlay.classList.remove('hidden');
@@ -516,7 +490,6 @@
       }, 800);
     }
 
-    // --- 生命值 UI 更新 ---
     function updateLivesUI() {
       livesContainer.innerHTML = '';
       for (let i = 0; i < 3; i++) {
@@ -528,7 +501,6 @@
       }
     }
 
-    // --- 重設與開始遊戲 ---
     function startGame() {
       score = 0;
       lives = 3;
@@ -557,7 +529,6 @@
       startGame();
     });
 
-    // --- 遊戲結束處理 ---
     function gameOver() {
       gameState = 'GAMEOVER';
       sounds.stopBGM();
@@ -583,13 +554,11 @@
       gameoverModal.classList.remove('hidden');
     }
 
-    // --- 扣生命機制 ---
     function loseLife() {
       lives--;
       updateLivesUI();
       sounds.playHurt();
 
-      // 畫面紅色閃爍效果
       const flash = document.createElement('div');
       flash.className = 'absolute inset-0 bg-red-500/30 pointer-events-none z-20 transition-opacity duration-300';
       document.body.appendChild(flash);
@@ -600,7 +569,6 @@
       }
     }
 
-    // --- MediaPipe FaceMesh 繪製與頭部關節辨識 ---
     function onResults(results) {
       const rect = canvasElement.getBoundingClientRect();
       const width = rect.width;
@@ -609,48 +577,40 @@
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, width, height);
 
-      // 水平翻轉以提供鏡像體驗
       canvasCtx.translate(width, 0);
       canvasCtx.scale(-1, 1);
 
-      // 繪製 Webcam 畫面
       if (results.image) {
         canvasCtx.drawImage(results.image, 0, 0, width, height);
       }
 
-      canvasCtx.restore(); // 恢復座標系統以正確繪製 UI 與文字
+      canvasCtx.restore();
 
-      // 檢查是否偵測到頭部
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
 
-        // 採額頭頂部 Landmark (#10) 作為基準點
         const topHead = landmarks[10];
         const leftEar = landmarks[234];
         const rightEar = landmarks[454];
 
-        // 翻轉 X 座標以符合鏡像畫布
         const currentHeadX = (1 - topHead.x) * width;
         const currentHeadY = topHead.y * height;
         const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.6;
 
-        // 平滑移動插值
         headX = headX === null ? currentHeadX : headX + (currentHeadX - headX) * 0.4;
         headY = headY === null ? currentHeadY : headY + (currentHeadY - headY) * 0.4;
         headWidth = currentWidth;
 
-        // 若因為超出鏡頭暫停，則自動恢復遊戲
         if (gameState === 'PAUSED') {
           pauseOverlay.classList.add('hidden');
           gameState = 'PLAYING';
           sounds.startBGM();
         }
 
-        // 繪製頭頂編織竹籃
-        drawBasket(headX, headY, headWidth);
+        // 繪製全新精緻立體竹籃
+        drawFancyBasket(headX, headY, headWidth);
 
       } else {
-        // 未偵測到頭部，自動暫停
         if (gameState === 'PLAYING') {
           gameState = 'PAUSED';
           sounds.stopBGM();
@@ -658,71 +618,117 @@
         }
       }
 
-      // 若在遊戲狀態下，更新與繪製物件
       if (gameState === 'PLAYING') {
         updateGameObjects(width, height);
       }
 
-      // 繪製特效與浮動字
       drawParticles();
       drawFloatTexts();
     }
 
-    // --- 繪製頭頂竹籃 ---
-    function drawBasket(x, y, width) {
-      const basketWidth = Math.max(100, width * 1.3);
-      const basketHeight = basketWidth * 0.45;
-      const basketX = x - basketWidth / 2;
+    // --- 【全新升級】高清立體編織竹籃繪製邏輯 ---
+    function drawFancyBasket(x, y, width) {
+      const basketWidth = Math.max(110, width * 1.35);
+      const basketHeight = basketWidth * 0.5;
       const basketY = y - basketHeight * 0.85;
 
       canvasCtx.save();
 
-      // 竹籃主體 (橢圓弧底)
+      // 1. 竹籃底部陰影
       canvasCtx.beginPath();
-      canvasCtx.ellipse(x, basketY + basketHeight / 2, basketWidth / 2, basketHeight / 2, 0, 0, Math.PI);
-      canvasCtx.fillStyle = '#d97706'; // Amber-600 竹籃黃褐色
+      canvasCtx.ellipse(x, basketY + basketHeight * 0.95, basketWidth * 0.4, basketHeight * 0.15, 0, 0, Math.PI * 2);
+      canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.35)';
       canvasCtx.fill();
-      canvasCtx.lineWidth = 4;
-      canvasCtx.strokeStyle = '#78350f'; // Amber-900 邊框
-      canvasCtx.stroke();
 
-      // 竹籃邊緣唇邊
+      // 2. 籃身立體漸層填色
+      const bodyGrad = canvasCtx.createLinearGradient(x - basketWidth/2, basketY, x + basketWidth/2, basketY + basketHeight);
+      bodyGrad.addColorStop(0, '#d97706');   // Amber-600
+      bodyGrad.addColorStop(0.5, '#b45309'); // Amber-700
+      bodyGrad.addColorStop(1, '#78350f');   // Amber-900
+
       canvasCtx.beginPath();
-      canvasCtx.ellipse(x, basketY, basketWidth / 2, basketHeight / 4, 0, 0, Math.PI * 2);
-      canvasCtx.fillStyle = '#f59e0b';
+      canvasCtx.ellipse(x, basketY + basketHeight * 0.5, basketWidth / 2, basketHeight / 2, 0, 0, Math.PI);
+      canvasCtx.fillStyle = bodyGrad;
       canvasCtx.fill();
-      canvasCtx.stroke();
 
-      // 竹籃編織紋路線條
-      canvasCtx.beginPath();
-      for (let i = -3; i <= 3; i++) {
-        const offset = (i / 4) * (basketWidth / 2);
-        canvasCtx.moveTo(x + offset, basketY);
-        canvasCtx.lineTo(x + offset * 0.8, basketY + basketHeight);
+      // 3. 多層次立體竹編網格線 (深淺交錯編織紋)
+      canvasCtx.save();
+      canvasCtx.clip(); // 限制在藍身範圍內
+      
+      canvasCtx.lineWidth = 2.5;
+      // 斜向左編織線
+      for (let i = -basketWidth; i <= basketWidth; i += 12) {
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(x + i, basketY);
+        canvasCtx.lineTo(x + i + basketHeight, basketY + basketHeight);
+        canvasCtx.strokeStyle = 'rgba(251, 191, 36, 0.35)'; // 高光淺黃線
+        canvasCtx.stroke();
       }
-      canvasCtx.strokeStyle = 'rgba(120, 53, 15, 0.4)';
+      // 斜向右編織線
+      for (let i = -basketWidth; i <= basketWidth; i += 12) {
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(x + i, basketY);
+        canvasCtx.lineTo(x + i - basketHeight, basketY + basketHeight);
+        canvasCtx.strokeStyle = 'rgba(69, 26, 3, 0.5)'; // 深棕陰影線
+        canvasCtx.stroke();
+      }
+      canvasCtx.restore();
+
+      // 竹籃輪廓外框
+      canvasCtx.beginPath();
+      canvasCtx.ellipse(x, basketY + basketHeight * 0.5, basketWidth / 2, basketHeight / 2, 0, 0, Math.PI);
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeStyle = '#451a03';
+      canvasCtx.stroke();
+
+      // 4. 籃口內部深陰影 (展現開口深度)
+      canvasCtx.beginPath();
+      canvasCtx.ellipse(x, basketY, basketWidth / 2, basketHeight / 3, 0, 0, Math.PI * 2);
+      const innerGrad = canvasCtx.createRadialGradient(x, basketY, 5, x, basketY, basketWidth / 2);
+      innerGrad.addColorStop(0, '#291002');
+      innerGrad.addColorStop(1, '#78350f');
+      canvasCtx.fillStyle = innerGrad;
+      canvasCtx.fill();
+      canvasCtx.strokeStyle = '#451a03';
       canvasCtx.lineWidth = 2;
       canvasCtx.stroke();
+
+      // 5. 籃沿邊紅絲帶飾帶 (經典典雅風格)
+      canvasCtx.beginPath();
+      canvasCtx.ellipse(x, basketY - 2, basketWidth / 2 + 2, basketHeight / 4, 0, 0, Math.PI * 2);
+      const ribbonGrad = canvasCtx.createLinearGradient(x - basketWidth/2, basketY, x + basketWidth/2, basketY);
+      ribbonGrad.addColorStop(0, '#dc2626');   // Red-600
+      ribbonGrad.addColorStop(0.5, '#ef4444'); // Red-500
+      ribbonGrad.addColorStop(1, '#991b1b');   // Red-800
+      canvasCtx.fillStyle = ribbonGrad;
+      canvasCtx.fill();
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeStyle = '#7f1d1d';
+      canvasCtx.stroke();
+
+      // 6. 籃沿兩端精緻黃金扣環裝飾
+      canvasCtx.fillStyle = '#fbbf24';
+      canvasCtx.beginPath();
+      canvasCtx.arc(x - basketWidth / 2 + 6, basketY + 2, 4, 0, Math.PI * 2);
+      canvasCtx.arc(x + basketWidth / 2 - 6, basketY + 2, 4, 0, Math.PI * 2);
+      canvasCtx.fill();
 
       canvasCtx.restore();
     }
 
-    // --- 更新與繪製掉落物件 (水果 & 炸彈) ---
     function updateGameObjects(width, height) {
       const now = Date.now();
 
-      // 隨時間稍微調快生成速度
       if (spawnInterval > 500) {
         spawnInterval = 1200 - score * 15;
       }
 
-      // 定期產生新掉落物
       if (now - lastSpawnTime > spawnInterval) {
         const itemType = getRandomItemType();
         items.push({
           x: Math.random() * (width - 60) + 30,
           y: -40,
-          speed: Math.random() * 2 + 3 + (score * 0.05), // 速度隨分數增加
+          speed: Math.random() * 2 + 3 + (score * 0.05),
           type: itemType.type,
           emoji: itemType.emoji,
           pts: itemType.pts,
@@ -733,9 +739,8 @@
         lastSpawnTime = now;
       }
 
-      // 竹籃碰撞區域 (頂部橢圓)
-      const basketWidth = Math.max(100, headWidth * 1.3);
-      const basketHeight = basketWidth * 0.45;
+      const basketWidth = Math.max(110, headWidth * 1.35);
+      const basketHeight = basketWidth * 0.5;
       const basketY = headY - basketHeight * 0.85;
 
       for (let i = items.length - 1; i >= 0; i--) {
@@ -743,7 +748,6 @@
         item.y += item.speed;
         item.rotation += item.rotSpeed;
 
-        // 繪製掉落物
         canvasCtx.save();
         canvasCtx.translate(item.x, item.y);
         canvasCtx.rotate(item.rotation);
@@ -751,7 +755,6 @@
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'middle';
 
-        // 閃亮水果專屬光芒發光效果
         if (item.type === 'shiny') {
           canvasCtx.shadowColor = '#f59e0b';
           canvasCtx.shadowBlur = 20;
@@ -760,7 +763,6 @@
         canvasCtx.fillText(item.emoji, 0, 0);
         canvasCtx.restore();
 
-        // 檢測是否被竹籃接住
         const dx = item.x - headX;
         const dy = item.y - basketY;
         const inHorizontal = Math.abs(dx) < basketWidth / 2;
@@ -768,20 +770,17 @@
 
         if (inHorizontal && inVertical) {
           if (item.type === 'bomb') {
-            // 接到炸彈！
             createParticles(item.x, item.y, '#ef4444', 20);
             sounds.playExplosion();
             addFloatText('BOOM! -1❤️', item.x, item.y, '#ef4444');
             loseLife();
           } else if (item.type === 'shiny') {
-            // 接到閃光水果 (+3分)
             score += item.pts;
             scoreDisplay.textContent = score;
             createParticles(item.x, item.y, '#f59e0b', 25);
             sounds.playCatchShiny();
             addFloatText(`+${item.pts}✨`, item.x, item.y, '#fbbf24');
           } else {
-            // 接到一般水果 (+1分)
             score += item.pts;
             scoreDisplay.textContent = score;
             createParticles(item.x, item.y, '#10b981', 12);
@@ -793,20 +792,16 @@
           continue;
         }
 
-        // 掉出畫面底部處理
         if (item.y > height + 40) {
           if (item.type === 'fruit' || item.type === 'shiny') {
-            // 漏接水果扣 1 條生命！
             addFloatText('MISS! -1❤️', item.x, height - 50, '#f87171');
             loseLife();
           }
-          // 炸彈安全掉出畫面不懲罰
           items.splice(i, 1);
         }
       }
     }
 
-    // --- 繪製粒子特效 ---
     function drawParticles() {
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -829,7 +824,6 @@
       }
     }
 
-    // --- 繪製浮動得分文字 ---
     function drawFloatTexts() {
       for (let i = floatTexts.length - 1; i >= 0; i--) {
         const ft = floatTexts[i];
@@ -853,7 +847,6 @@
       }
     }
 
-    // --- 初始化 MediaPipe 與攝影機 ---
     function initCameraAndMediaPipe() {
       if (faceMesh) return;
 
