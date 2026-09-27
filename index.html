@@ -423,18 +423,14 @@
       soundIcon.textContent = isMuted ? '🔇' : '🔊';
     });
 
-    // 隨機產生掉落物類型 (加大水果，炸彈維持原大小)
     function getRandomItemType() {
       const rand = Math.random();
       if (rand < 0.12) {
-        // 炸彈 (維持原大小 36px)
         return { type: 'bomb', emoji: '💣', pts: 0, size: 36 };
       } else if (rand < 0.22) {
-        // 閃亮水果 (加大至 58px)
         const fruitEmoji = FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
         return { type: 'shiny', emoji: fruitEmoji, pts: 3, size: 58 };
       } else {
-        // 普通水果 (加大至 54px)
         const fruitEmoji = FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
         return { type: 'fruit', emoji: fruitEmoji, pts: 1, size: 54 };
       }
@@ -478,7 +474,6 @@
           setTimeout(() => {
             countdownOverlay.classList.add('hidden');
             gameState = 'PLAYING';
-            // 同步基礎時間軸，徹底消滅加速累積 bug
             lastSpawnTime = performance.now();
             lastFrameTime = performance.now();
             sounds.startBGM();
@@ -500,7 +495,6 @@
     }
 
     async function startGame() {
-      // 徹底清除狀態與掉落陣列
       score = 0;
       lives = 3;
       items = [];
@@ -577,9 +571,8 @@
       const width = rect.width;
       const height = rect.height;
 
-      // 計算兩影格間的時間差 (Delta Time)，徹底固定移動速率
       const now = performance.now();
-      const dt = Math.min((now - lastFrameTime) / 1000, 0.05); // 上限 50ms 防止卡頓大跳躍
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
       lastFrameTime = now;
 
       canvasCtx.save();
@@ -603,7 +596,8 @@
 
         const currentHeadX = (1 - topHead.x) * width;
         const currentHeadY = topHead.y * height;
-        const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.0;
+        // 計算頭部寬度，並給予 1.25 倍放大系數，讓籃子適度變大
+        const currentWidth = Math.abs(leftEar.x - rightEar.x) * width * 1.25;
 
         headX = headX === null ? currentHeadX : headX + (currentHeadX - headX) * 0.4;
         headY = headY === null ? currentHeadY : headY + (currentHeadY - headY) * 0.4;
@@ -634,7 +628,8 @@
     }
 
     function drawBasketEmoji(x, y, width) {
-      const size = Math.max(65, width);
+      // 竹籃基礎大小由 65px 提升至 85px，且依頭部大小放鬆適配
+      const size = Math.max(85, width);
       const basketY = y - size * 0.35;
 
       canvasCtx.save();
@@ -651,7 +646,6 @@
     }
 
     function updateGameObjects(width, height, now, dt) {
-      // 根據分數平滑調配發送頻率 (最低 520ms)
       spawnInterval = Math.max(520, 1250 - score * 10);
 
       if (now - lastSpawnTime > spawnInterval) {
@@ -659,7 +653,6 @@
         items.push({
           x: Math.random() * (width - 80) + 40,
           y: -50,
-          // 速度使用像素/秒單位計算，穩定下落 (基礎 220px/s ~ 320px/s)
           speedPxPerSec: (220 + Math.random() * 100) + Math.min(score * 3, 180),
           type: itemType.type,
           emoji: itemType.emoji,
@@ -671,20 +664,18 @@
         lastSpawnTime = now;
       }
 
-      const basketSize = Math.max(65, headWidth);
+      const basketSize = Math.max(85, headWidth);
       const basketY = headY - basketSize * 0.35;
 
       for (let i = items.length - 1; i >= 0; i--) {
         const item = items[i];
         
-        // 基於 delta time 精確更新位置與旋轉
         item.y += item.speedPxPerSec * dt;
         item.rotation += item.rotSpeed * dt;
 
         canvasCtx.save();
         canvasCtx.translate(item.x, item.y);
 
-        // --- 1. 先繪製背景圓形光暈與小星光 (擴大適應大水果) ---
         if (item.type === 'shiny') {
           const haloGrad = canvasCtx.createRadialGradient(0, 0, 5, 0, 0, 48);
           haloGrad.addColorStop(0, 'rgba(255, 235, 59, 0.95)');
@@ -696,7 +687,6 @@
           canvasCtx.fillStyle = haloGrad;
           canvasCtx.fill();
 
-          // 星光裝飾
           canvasCtx.font = '18px serif';
           canvasCtx.textAlign = 'center';
           canvasCtx.textBaseline = 'middle';
@@ -704,7 +694,6 @@
           canvasCtx.fillText('✨', 30, 24);
         }
 
-        // --- 2. 上層繪製大水果/炸彈圖案 ---
         canvasCtx.rotate(item.rotation);
         canvasCtx.font = `${item.size}px serif`;
         canvasCtx.textAlign = 'center';
@@ -719,11 +708,10 @@
 
         canvasCtx.restore();
 
-        // 碰撞檢測
         const dx = item.x - headX;
         const dy = item.y - basketY;
         const inHorizontal = Math.abs(dx) < (basketSize / 2 + item.size / 4);
-        const inVertical = Math.abs(dy) < 26;
+        const inVertical = Math.abs(dy) < 30;
 
         if (inHorizontal && inVertical) {
           if (item.type === 'bomb') {
